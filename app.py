@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import openai
-from openai.embeddings_utils import get_embedding
 import faiss
 import numpy as np
 
@@ -15,7 +14,6 @@ api_key = st.text_input("Enter your OpenAI API Key", type="password")
 uploaded_file = st.file_uploader("Upload Excel file", type="xlsx")
 
 # Helper: Load and parse Excel
-@st.cache_data(show_spinner=False)
 def load_excel_content(file):
     xls = pd.ExcelFile(file)
     all_data = []
@@ -26,13 +24,18 @@ def load_excel_content(file):
     return all_data
 
 # Helper: Embed chunks
-@st.cache_resource(show_spinner=False)
 def embed_chunks(chunks, api_key):
     openai.api_key = api_key
-    return [get_embedding(chunk, engine="text-embedding-3-small") for chunk in chunks]
+    embeddings = []
+    for chunk in chunks:
+        response = openai.Embedding.create(
+            input=chunk,
+            model="text-embedding-3-small"
+        )
+        embeddings.append(response['data'][0]['embedding'])
+    return embeddings
 
 # Helper: Build FAISS index
-@st.cache_resource(show_spinner=False)
 def build_faiss_index(vectors):
     dimension = len(vectors[0])
     index = faiss.IndexFlatL2(dimension)
@@ -41,7 +44,12 @@ def build_faiss_index(vectors):
 
 # Helper: Get top matching chunks
 def get_top_chunks(query, chunks, index, api_key, k=3):
-    query_vector = get_embedding(query, engine="text-embedding-3-small")
+    openai.api_key = api_key
+    response = openai.Embedding.create(
+        input=query,
+        model="text-embedding-3-small"
+    )
+    query_vector = response['data'][0]['embedding']
     D, I = index.search(np.array([query_vector]).astype("float32"), k)
     return [chunks[i] for i in I[0]]
 
