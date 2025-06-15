@@ -17,25 +17,34 @@ uploaded_file = st.file_uploader("Upload Excel file", type="xlsx")
 def get_openai_client(api_key):
     return openai.OpenAI(api_key=api_key)
 
-# Helper: Load and parse Excel
+# Helper: Load and parse Excel with safe chunking
 def load_excel_content(file):
     xls = pd.ExcelFile(file)
     all_data = []
     for sheet in xls.sheet_names:
-        df = xls.parse(sheet)
-        df = df.dropna(how='all')
-        all_data.append(f"Sheet: {sheet}\n{df.to_string(index=False)}")
+        df = xls.parse(sheet).dropna(how='all')
+        if df.empty:
+            continue
+        for i in range(0, len(df), 100):
+            chunk_df = df.iloc[i:i+100]
+            text_chunk = f"Sheet: {sheet}\n{chunk_df.to_string(index=False)}"
+            if text_chunk.strip():
+                all_data.append(text_chunk[:8000])  # Truncate to avoid token overflow
     return all_data
 
-# Helper: Embed chunks
+# Helper: Embed chunks safely
 def embed_chunks(chunks, client):
     embeddings = []
     for chunk in chunks:
-        embedding = client.embeddings.create(
-            input=chunk,
-            model="text-embedding-3-small"
-        ).data[0].embedding
-        embeddings.append(embedding)
+        try:
+            embedding = client.embeddings.create(
+                input=chunk,
+                model="text-embedding-3-small"
+            ).data[0].embedding
+            embeddings.append(embedding)
+        except Exception as e:
+            st.warning(f"Skipping a chunk due to error: {e}")
+            continue
     return embeddings
 
 # Helper: Build FAISS index
@@ -48,7 +57,7 @@ def build_faiss_index(vectors):
 # Helper: Get top matching chunks
 def get_top_chunks(query, chunks, index, client, k=3):
     query_vector = client.embeddings.create(
-        input=query,
+        input=query[:8000],
         model="text-embedding-3-small"
     ).data[0].embedding
     D, I = index.search(np.array([query_vector]).astype("float32"), k)
@@ -67,12 +76,18 @@ if uploaded_file and api_key:
     st.info("Processing file and generating embeddings...")
     client = get_openai_client(api_key)
     chunks = load_excel_content(uploaded_file)
-    vectors = embed_chunks(chunks, client)
-    index = build_faiss_index(vectors)
-    st.session_state['chunks'] = chunks
-    st.session_state['index'] = index
-    st.session_state['client'] = client
-    st.success("Setup complete! You can now ask questions.")
+    if not chunks:
+        st.error("No valid data found in Excel file.")
+    else:
+        vectors = embed_chunks(chunks, client)
+        if not vectors:
+            st.error("Embedding failed for all chunks.")
+        else:
+            index = build_faiss_index(vectors)
+            st.session_state['chunks'] = chunks
+            st.session_state['index'] = index
+            st.session_state['client'] = client
+            st.success("Setup complete! You can now ask questions.")
 
 # Ask question
 if api_key and 'index' in st.session_state:
