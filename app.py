@@ -65,7 +65,7 @@ st.markdown(
 
 # Function to handle Q&A option
 def code_for_chat(api_key):
-    st.write('<div class="greeting-text">Hello, Sangram!</div>', unsafe_allow_html=True)
+    st.write('<div class="greeting-text">SSS Talk with Excel!</div>', unsafe_allow_html=True)
     st.sidebar.info("Ask any question about the uploaded Excel or CSV data.")
     st.sidebar.image("https://miro.medium.com/v2/resize:fit:786/format:webp/1*qUFgGhSERoWAa08MV6AVCQ.jpeg", use_container_width=True)
 
