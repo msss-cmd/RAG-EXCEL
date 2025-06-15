@@ -2,8 +2,7 @@ streamlit
 pandas
 openpyxl
 matplotlib
+sqlalchemy
 langchain
 langchain-openai
 langchain-community
-sqlalchemy
-ydata-profiling==4.6.4
